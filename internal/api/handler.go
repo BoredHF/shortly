@@ -2,14 +2,17 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"shortly/internal/storage"
 	"shortly/internal/utils"
 	"strings"
+	"time"
 )
 
 type ShortenRequest struct {
-	OriginalURL string `json:"original_url"`
+	OriginalURL      string `json:"original_url"`
+	ExpiresInMinutes *int   `json:"expires_in_minutes"`
 }
 
 type ShortenResponse struct {
@@ -29,6 +32,13 @@ func ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid JSON or missing URL", http.StatusBadRequest)
 		return
 	}
+
+	var expiresAt *string
+	if req.ExpiresInMinutes != nil {
+		t := time.Now().UTC().Add(time.Duration(*req.ExpiresInMinutes) * time.Minute).Format("2006-01-02 15:04:05")
+		expiresAt = &t
+	}
+
 	existingID, err := storage.FindShortIDByOriginalURL(req.OriginalURL)
 	if err == nil {
 		// URL already exists, return existing short URL
@@ -41,7 +51,7 @@ func ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// TODO: generate short ID and store mapping
 	shortID := utils.GenerateShortID(6)
-	err = storage.SaveURL(shortID, req.OriginalURL)
+	err = storage.SaveURL(shortID, req.OriginalURL, expiresAt)
 	if err != nil {
 		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
 		return
@@ -61,7 +71,11 @@ func RedirectHandler(w http.ResponseWriter, r *http.Request) {
 
 	url, err := storage.GetOriginalURL(shortID)
 	if err != nil {
-		http.Error(w, "Short URL not found", http.StatusNotFound)
+		if errors.Is(err, storage.ErrLinkExpired) {
+			http.Error(w, "This short link has expired.", http.StatusGone) // 410 Gone
+		} else {
+			http.Error(w, "Short URL not found", http.StatusNotFound)
+		}
 		return
 	}
 
