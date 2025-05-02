@@ -1,0 +1,19 @@
+# Go build files
+*.exe
+*.out
+*.test
+
+# SQLite database file
+shortly.db
+
+# Dependency directories (optional)
+vendor/
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
